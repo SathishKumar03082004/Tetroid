@@ -12,6 +12,7 @@ public class Grid : MonoBehaviour
     public Vector2 startposition = new Vector2(0.0f, 0.0f);
     public float squarescale = 0.5f;
     public float everysquareoffset = 0.0f;
+    public SquareTextureData squareTextureData;
 
     private Vector2 offset = new Vector2(0.0f, 0.0f);
 
@@ -19,18 +20,34 @@ public class Grid : MonoBehaviour
 
     private LineIndicator line_indicator;
 
+    private Config.SquareColor currentActiveSquareColor=Config.SquareColor.NotSet;
+
+    [Header("Audio Clips")]
+    public AudioClip rowColumnCancelClip;
+    public AudioClip grid3x3CancelClip;
+
+    private AudioSource audioSource;
+
     private void OnEnable() {
         GameEvents.CheckIfShapeCanBePlaced += CheckIfShapeCanBePlaced;
+        GameEvents.UpdateSquareColor+=OnUpdateSquareColor;
     }
 
     private void OnDisable() {
         GameEvents.CheckIfShapeCanBePlaced -= CheckIfShapeCanBePlaced;
+        GameEvents.UpdateSquareColor-=OnUpdateSquareColor;
     }
 
     void Start()
     {
         line_indicator = GetComponent<LineIndicator>();
+        audioSource = GetComponent<AudioSource>();
         CreateGrid();
+        currentActiveSquareColor=squareTextureData.activeSquareTextures[0].squareColor;
+    }
+
+    private void OnUpdateSquareColor(Config.SquareColor color){
+        currentActiveSquareColor=color;
     }
 
     private void CreateGrid()
@@ -116,7 +133,7 @@ public class Grid : MonoBehaviour
 
         if (currentSelectedShape.TotalSquareNumber == squareIndexs.Count) {
             foreach (var squareIndex in squareIndexs) {
-                gridsquare[squareIndex].GetComponent<GridSquare>().PlaceShapeOnBoard();
+                gridsquare[squareIndex].GetComponent<GridSquare>().PlaceShapeOnBoard(currentActiveSquareColor);
             }
 
             var shapeLeft = 0;
@@ -157,21 +174,23 @@ public class Grid : MonoBehaviour
             lines.Add(data.ToArray());
         }
 
-        //3X3 Matrix Cancalation 
-        // for(var square=0;square<9;square++){
-        //     List<int> data = new List<int>(9);
-        //     for(var index =0;index < 9;index++) {
-        //         data.Add(line_indicator.square_data[square,index]);
-        //     }
-        //     lines.Add(data.ToArray());
-        // }
-
         var completedLines = CheckIfSquaresAreCompleted(lines);
 
-        if (completedLines > 2) {
-            //play bonus
+        // Handle 3x3 matrices separately
+        var completed3x3Matrices = CheckIf3x3MatricesAreCompleted();
+
+        if (completedLines >= 2) {
+            // play bonus
+            GameEvents.ShowCongratulationsWritings();
         }
-        // Add score
+
+        var totalScore = 10 * completedLines + 15 * completed3x3Matrices;
+        if (totalScore >= 15) {
+            GameEvents.ShowCongratulationsWritings();
+        }
+        //GameEvents.ShowCongratulationsWritings();
+        GameEvents.AddScores(totalScore);
+        CheckIfPlayerLost();
     }
 
     private int CheckIfSquaresAreCompleted(List<int[]> data) {
@@ -210,6 +229,138 @@ public class Grid : MonoBehaviour
                 linesCompleted++;
             }
         }
+
+        // Play audio if any line is completed
+        if (linesCompleted > 0 && audioSource != null && rowColumnCancelClip != null)
+        {
+            audioSource.PlayOneShot(rowColumnCancelClip);
+        }
         return linesCompleted;
+    }
+
+    private int CheckIf3x3MatricesAreCompleted() {
+        int completedMatrices = 0;
+        for (var square = 0; square < 9; square++) {
+            bool matrixCompleted = true;
+            for (var index = 0; index < 9; index++) {
+                var comp = gridsquare[line_indicator.square_data[square, index]].GetComponent<GridSquare>();
+                if (!comp.squareOccupied) {
+                    matrixCompleted = false;
+                    break;
+                }
+            }
+
+            if (matrixCompleted) {
+                completedMatrices++;
+                // Deactivate and clear the 3x3 matrix
+                for (var index = 0; index < 9; index++) {
+                    var comp = gridsquare[line_indicator.square_data[square, index]].GetComponent<GridSquare>();
+                    comp.Deactivate();
+                    comp.ClearOccupied();
+                }
+            }
+        }
+
+        if (completedMatrices > 0 && audioSource != null && grid3x3CancelClip != null)
+        {
+            audioSource.PlayOneShot(grid3x3CancelClip);
+        }
+        return completedMatrices;
+    }
+
+    private void CheckIfPlayerLost(){
+        var validShapes=0;
+
+        for(var index =0;index<shapestorage.shapeList.Count;index++){
+            var isShapeActive=shapestorage.shapeList[index].IsAnyOfShapeSquareActive();
+            if(CheckIfShapeCanBePlacedOnGrid(shapestorage.shapeList[index])&& isShapeActive){
+                shapestorage.shapeList[index]?.ActivateShape();
+                validShapes++;
+            }
+        }
+
+        if(validShapes==0){
+            //Game over
+            GameEvents.GameOver(false);
+            Debug.Log("Game Over");
+        }
+    }
+
+    private bool CheckIfShapeCanBePlacedOnGrid(Shape currentShape){
+        var currentShapeData=currentShape.currentshapedata;
+        var shapeColumns=currentShapeData.columns;
+        var shapeRows=currentShapeData.rows;
+
+        //all index
+        List<int> originalShapeFilledUpSquares= new List<int>();
+        var squareIndex=0;
+
+        for(var rowIndex=0;rowIndex<shapeRows;rowIndex++){
+            for(var columnIndex=0;columnIndex<shapeColumns;columnIndex++){
+                if(currentShapeData.board[rowIndex].column[columnIndex]){
+                    originalShapeFilledUpSquares.Add(squareIndex);
+                }
+                squareIndex++;
+            }
+        }
+
+        if(currentShape.TotalSquareNumber!=originalShapeFilledUpSquares.Count){
+            Debug.LogError("No Space Is Avaliable");
+        }
+
+        var squareList=GetAllSquaresCombination(shapeColumns,shapeRows);
+
+        bool canBePlaced=false;
+
+        foreach(var number in squareList){
+            bool shapeCanBePlacedOnTheBoard=true;
+            foreach(var squareIndexToCheck in originalShapeFilledUpSquares){
+                //if (squareIndexToCheck >= number.Length) continue;
+                var comp = gridsquare[number[squareIndexToCheck]].GetComponent<GridSquare>();
+                if(comp.squareOccupied){
+                    shapeCanBePlacedOnTheBoard=false;
+                }
+            }
+
+            if(shapeCanBePlacedOnTheBoard){
+                canBePlaced=true;
+            }
+        }
+        return canBePlaced;
+    }
+
+
+
+    private List<int[]> GetAllSquaresCombination(int columns,int rows){
+        var squareList=new List<int[]>();
+        var lastColumnIndex=0;
+        var lastRowIndex=0;
+
+        int safeIndex=0;
+
+        while(lastRowIndex+(rows-1)<9){
+            var rowData=new List<int>();
+
+            for(var row=lastRowIndex;row<lastRowIndex+rows;row++){
+                for(var column=lastColumnIndex;column<lastColumnIndex+columns;column++){
+                    rowData.Add(line_indicator.line_data[row,column]);
+                }
+            }
+
+            squareList.Add(rowData.ToArray());
+            lastColumnIndex++;
+
+            if(lastColumnIndex+(columns-1)>=9){
+                lastRowIndex++;
+                lastColumnIndex=0;
+            }
+
+            safeIndex++;
+            if(safeIndex>100){
+                break;
+            }
+        }
+
+        return squareList;
     }
 }
