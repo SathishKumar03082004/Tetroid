@@ -2,112 +2,123 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
-public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBeginDragHandler,IDragHandler,IEndDragHandler,IPointerDownHandler
+public class Shape : MonoBehaviour, IPointerClickHandler, IPointerUpHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
     public GameObject squareShapeImage;
     public Vector3 shapeSelectedScale;
-    public Vector2 offset =new Vector2(0f,700f);
-
+    public Vector2 offset = new Vector2(0f, 700f);
 
     [HideInInspector]
-    public ShapeData currentshapedata;
-    public int TotalSquareNumber{get;set;}
+    public ShapeData currentShapeData;
+    public int TotalSquareNumber { get; set; }
 
-    private List<GameObject> currentshape = new List<GameObject>();
+    private List<GameObject> currentShape = new List<GameObject>();
     private Vector3 shapeStartScale;
     private RectTransform _transform;
-    private bool shapeDraggable=true;
+    private bool shapeDraggable = true;
     private Canvas canvas;
-    private Vector3 startposition;
-    private bool shapeactive=true;
+    private Vector3 startPosition;
+    private bool shapeActive = true;
 
-    public void Awake() {
-        shapeStartScale=this.GetComponent<RectTransform>().localScale;
-        _transform=this.GetComponent<RectTransform>();
-        canvas=GetComponentInParent<Canvas>();
-        shapeDraggable=true;
-        startposition=_transform.localPosition;
-        shapeactive=true;
-
-        //startposition=_transform.localPosition;
+    public void Awake()
+    {
+        shapeStartScale = this.GetComponent<RectTransform>().localScale;
+        _transform = this.GetComponent<RectTransform>();
+        canvas = GetComponentInParent<Canvas>();
+        startPosition = _transform.localPosition;
+        shapeActive = true;
     }
 
-    private void OnEnable() {
+    private void OnEnable()
+    {
         GameEvents.MoveShapeToStartPosition += MoveShapeToStartPosition;
-        //GameEvents.SetShapeInactive+=SetShapeInactive;
         GameEvents.SetShapeInactive += SetShapeInactive;
     }
 
-    private void OnDisable() {
+    private void OnDisable()
+    {
         GameEvents.MoveShapeToStartPosition -= MoveShapeToStartPosition;
-        GameEvents.SetShapeInactive-=SetShapeInactive;
+        GameEvents.SetShapeInactive -= SetShapeInactive;
     }
 
-
-    public bool IsOnStartPosition(){
-        return _transform.localPosition==startposition;
+    public bool IsOnStartPosition()
+    {
+        return _transform.localPosition == startPosition;
     }
 
-    public bool IsAnyOfShapeSquareActive(){
-        foreach(var square in currentshape){
-            if(square.gameObject.activeSelf){
+    public bool IsAnyOfShapeSquareActive()
+    {
+        foreach (var square in currentShape)
+        {
+            if (square.gameObject.activeSelf)
+            {
                 return true;
             }
         }
         return false;
     }
 
-    public void DeactivateShape(){
-        if(shapeactive){
-            foreach(var square in currentshape){
+    public void DeactivateShape()
+    {
+        if (shapeActive)
+        {
+            foreach (var square in currentShape)
+            {
                 square?.GetComponent<ShapeSquare>().DeactivateShape();
             }
         }
-        shapeactive=false;
+        shapeActive = false;
     }
 
-    private void SetShapeInactive(){
-        if(IsOnStartPosition() == false && IsAnyOfShapeSquareActive()){
-            foreach(var square in currentshape){
+    private void SetShapeInactive()
+    {
+        if (!IsOnStartPosition() && IsAnyOfShapeSquareActive())
+        {
+            foreach (var square in currentShape)
+            {
                 square.gameObject.SetActive(false);
             }
         }
     }
 
-    public void ActivateShape(){
-        if(!shapeactive){
-            foreach(var square in currentshape){
+    public void ActivateShape()
+    {
+        if (!shapeActive)
+        {
+            foreach (var square in currentShape)
+            {
                 square?.GetComponent<ShapeSquare>().ActivateShape();
             }
         }
-        shapeactive=true;
+        shapeActive = true;
     }
 
-    public void RequestNewShape(ShapeData shapeData)
+    public void RequestNewShape(ShapeData shapeData, Color squareColor)
     {
-        _transform.localPosition=startposition;
-        CreateShape(shapeData);
+        CreateShape(shapeData, squareColor);
     }
 
-    public void CreateShape(ShapeData shapeData)
+    public void CreateShape(ShapeData shapeData, Color squareColor)
     {
-        currentshapedata = shapeData;
-        TotalSquareNumber = GetNumberofSquares(shapeData);
+        currentShapeData = shapeData;
+        TotalSquareNumber = GetNumberOfSquares(shapeData);
 
-        while (currentshape.Count <= TotalSquareNumber)
+        while (currentShape.Count < TotalSquareNumber)
         {
-            currentshape.Add(Instantiate(squareShapeImage, transform) as GameObject);
+            currentShape.Add(Instantiate(squareShapeImage, transform) as GameObject);
         }
 
-        foreach (var square in currentshape)
+        for (int i = 0; i < currentShape.Count; i++)
         {
-            square.gameObject.transform.position = Vector3.zero;
-            square.gameObject.SetActive(false);
+            currentShape[i].gameObject.SetActive(i < TotalSquareNumber);
+            currentShape[i].transform.localPosition = Vector3.zero;
+            currentShape[i].GetComponent<Image>().color = squareColor;
         }
 
-        var squareReact = squareShapeImage.GetComponent<RectTransform>();
-        var moveDistance = new Vector2(squareReact.rect.width * squareReact.localScale.x, squareReact.rect.height * squareReact.localScale.y);
+        var squareRect = squareShapeImage.GetComponent<RectTransform>();
+        var moveDistance = new Vector2(squareRect.rect.width * squareRect.localScale.x, squareRect.rect.height * squareRect.localScale.y);
 
         int currentIndexInList = 0;
 
@@ -118,8 +129,8 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
             {
                 if (shapeData.board[row].column[column])
                 {
-                    currentshape[currentIndexInList].SetActive(true);
-                    currentshape[currentIndexInList].GetComponent<RectTransform>().localPosition = new Vector2(
+                    currentShape[currentIndexInList].SetActive(true);
+                    currentShape[currentIndexInList].GetComponent<RectTransform>().localPosition = new Vector2(
                         GetXPositionForShapeSquare(shapeData, column, moveDistance),
                         GetYPositionForShapeSquare(shapeData, row, moveDistance));
                     currentIndexInList++;
@@ -130,7 +141,7 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
 
     private float GetYPositionForShapeSquare(ShapeData shapeData, int row, Vector2 moveDistance)
     {
-        float shiftOny = 0f;
+        float shiftOnY = 0f;
 
         if (shapeData.rows > 1)
         {
@@ -141,13 +152,13 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
 
                 if (row < middleSquareIndex)
                 { // move negative
-                    shiftOny = moveDistance.y * 1;
-                    shiftOny *= multiplier;
+                    shiftOnY = moveDistance.y * 1;
+                    shiftOnY *= multiplier;
                 }
                 else if (row > middleSquareIndex)
                 { // move plus
-                    shiftOny = moveDistance.y * -1;
-                    shiftOny *= multiplier;
+                    shiftOnY = moveDistance.y * -1;
+                    shiftOnY *= multiplier;
                 }
             }
             else
@@ -160,32 +171,32 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
                 {
                     if (row == middleSquareIndex2)
                     {
-                        shiftOny = (moveDistance.y / 2) * -1;
+                        shiftOnY = (moveDistance.y / 2) * -1;
                     }
                     if (row == middleSquareIndex1)
                     {
-                        shiftOny = (moveDistance.y / 2);
+                        shiftOnY = (moveDistance.y / 2);
                     }
 
                     if (row < middleSquareIndex1 && row < middleSquareIndex2)
                     { // negative
-                        shiftOny = moveDistance.y * 1;
-                        shiftOny *= multiplier;
+                        shiftOnY = moveDistance.y * 1;
+                        shiftOnY *= multiplier;
                     }
                     else if (row > middleSquareIndex1 && row > middleSquareIndex2)
                     { // positive
-                        shiftOny = moveDistance.y * -1;
-                        shiftOny *= multiplier;
+                        shiftOnY = moveDistance.y * -1;
+                        shiftOnY *= multiplier;
                     }
                 }
             }
         }
-        return shiftOny;
+        return shiftOnY;
     }
 
     private float GetXPositionForShapeSquare(ShapeData shapeData, int column, Vector2 moveDistance)
     {
-        float shiftOnx = 0f;
+        float shiftOnX = 0f;
 
         if (shapeData.columns > 1)
         { // vertical position
@@ -195,13 +206,13 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
                 var multiplier = (shapeData.columns - 1) / 2;
                 if (column < middleSquareIndex)
                 {
-                    shiftOnx = moveDistance.x * -1;
-                    shiftOnx *= multiplier;
+                    shiftOnX = moveDistance.x * -1;
+                    shiftOnX *= multiplier;
                 }
                 else if (column > middleSquareIndex)
                 {
-                    shiftOnx = moveDistance.x * 1;
-                    shiftOnx *= multiplier;
+                    shiftOnX = moveDistance.x * 1;
+                    shiftOnX *= multiplier;
                 }
             }
             else
@@ -214,34 +225,34 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
                 {
                     if (column == middleSquareIndex2)
                     {
-                        shiftOnx = moveDistance.x / 2;
+                        shiftOnX = moveDistance.x / 2;
                     }
                     if (column == middleSquareIndex1)
                     {
-                        shiftOnx = (moveDistance.x / 2) * -1;
+                        shiftOnX = (moveDistance.x / 2) * -1;
                     }
 
                     if (column < middleSquareIndex1 && column < middleSquareIndex2)
                     { // negative
-                        shiftOnx = moveDistance.x * -1;
-                        shiftOnx *= multiplier;
+                        shiftOnX = moveDistance.x * -1;
+                        shiftOnX *= multiplier;
                     }
                     else if (column > middleSquareIndex1 && column > middleSquareIndex2)
                     { // plus
-                        shiftOnx = moveDistance.x * 1;
-                        shiftOnx *= multiplier;
+                        shiftOnX = moveDistance.x * 1;
+                        shiftOnX *= multiplier;
                     }
                 }
             }
         }
-        return shiftOnx;
+        return shiftOnX;
     }
 
-    private int GetNumberofSquares(ShapeData shapedata)
+    private int GetNumberOfSquares(ShapeData shapeData)
     {
         int number = 0;
 
-        foreach (var rowData in shapedata.board)
+        foreach (var rowData in shapeData.board)
         {
             foreach (var active in rowData.column)
             {
@@ -254,38 +265,45 @@ public class Shape : MonoBehaviour,IPointerClickHandler,IPointerUpHandler,IBegin
         return number;
     }
 
-    public void OnPointerClick(PointerEventData eventData){
+    public void OnPointerClick(PointerEventData eventData)
+    {
 
     }
 
-    public void OnPointerUp(PointerEventData eventData){
+    public void OnPointerUp(PointerEventData eventData)
+    {
 
     }
 
-    public void OnBeginDrag(PointerEventData eventData){
-        this.GetComponent<RectTransform>().localScale=shapeSelectedScale;
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        _transform.localScale = shapeSelectedScale;
     }
 
-    public void OnDrag(PointerEventData eventData){
-        _transform.anchorMin=new Vector2(0,0);
-        _transform.anchorMax=new Vector2(0,0);
-        _transform.pivot=new Vector2(0,0);
+    public void OnDrag(PointerEventData eventData)
+    {
+        _transform.anchorMin = new Vector2(0, 0);
+        _transform.anchorMax = new Vector2(0, 0);
+        _transform.pivot = new Vector2(0, 0);
 
         Vector2 pos;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.transform as RectTransform,eventData.position,Camera.main,out pos);
-        _transform.localPosition=pos+offset;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.transform as RectTransform, eventData.position, Camera.main, out pos);
+        _transform.localPosition = pos + offset;
     }
 
-    public void OnEndDrag(PointerEventData eventData){
-        this.GetComponent<RectTransform>().localScale=shapeSelectedScale;
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        _transform.localScale = shapeSelectedScale;
         GameEvents.CheckIfShapeCanBePlaced();
     }
 
-    public void OnPointerDown(PointerEventData eventData){
+    public void OnPointerDown(PointerEventData eventData)
+    {
 
     }
 
-    private void MoveShapeToStartPosition(){
-        _transform.transform.localPosition=startposition;
+    private void MoveShapeToStartPosition()
+    {
+        _transform.localPosition = startPosition;
     }
 }
